@@ -1,6 +1,8 @@
 import NextAuth from 'next-auth'
 import GoogleProvider from 'next-auth/providers/google'
 import GithubProvider from 'next-auth/providers/github'
+import connectMongoDB from '@/libs/mongodb'
+import User from '@/models/user'
 
 export const authOptions = {
   providers: [
@@ -17,6 +19,44 @@ export const authOptions = {
     signin: '/signin',
   },
   secret: process.env.NEXTAUTH_SECRET,
+  callbacks: {
+    async signin({ user, account }) {
+      const apiUrl = process.env.API_URL
+      const { name, email } = user
+
+      if (account.provider === 'google' || account.provider === 'github') {
+        try {
+          await connectMongoDB()
+          const userExists = await User.findOne({ email })
+
+          if (!userExists) {
+            const res = await fetch(`${apiUrl}/api/user`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({ name, email }),
+            })
+            if (res.ok) {
+              return user
+            }
+          }
+          const res1 = await fetch(`${apiUrl}/api/log`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ email }),
+          })
+        } catch (error) {
+          console.log(error)
+        }
+      }
+      return user
+    },
+  },
 }
+
 const handler = NextAuth(authOptions)
+
 export { handler as GET, handler as POST }
